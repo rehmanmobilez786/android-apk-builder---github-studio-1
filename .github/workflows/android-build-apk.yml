@@ -55,24 +55,3 @@ jobs:
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
-          retention-days: 30
-
-      - name: Create or Update GitHub Release with APK
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-        uses: softprops/action-gh-release@v2
-        continue-on-error: true
-        with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Android APK Release v1.0.${{ github.run_number }}
-          draft: false
-          prerelease: false
-          files: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
-          body: |
-            🚀 **Android APK Ready for Download!**
-            - **Run:** #${{ github.run_number }}
-            - **Commit:** ${{ github.sha }}
-            - Download `app-debug.apk` directly on your phone and install!
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

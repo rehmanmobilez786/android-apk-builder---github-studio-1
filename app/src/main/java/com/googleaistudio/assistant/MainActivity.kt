@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.webkit.*
@@ -11,6 +12,7 @@ import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
 
 /**
  * Google AI Studio Production Android Host.
@@ -42,65 +44,41 @@ class MainActivity : AppCompatActivity() {
         fileUploadCallback = null
     }
 
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val granted = permissions.entries.all { it.value }
-        if (!granted) {
-            Toast.makeText(this, "Permissions required for full capabilities.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, true)
         setContentView(R.layout.activity_main)
 
         webView = findViewById(R.id.webView)
         progressBar = findViewById(R.id.progressBar)
 
-        requestPermissionLauncher.launch(
-            arrayOf(
-                android.Manifest.permission.CAMERA,
-                android.Manifest.permission.RECORD_AUDIO
-            )
-        )
-
-        setupWebView()
-        webView.loadUrl("file:///android_asset/dist/index.html")
+        setupAIStudioWebView()
+        loadAIStudioBundle()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun setupWebView() {
-        webView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            allowFileAccess = true
-            allowContentAccess = true
-            mediaPlaybackRequiresUserGesture = false
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-        }
+    private fun setupAIStudioWebView() {
+        val settings = webView.settings
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.databaseEnabled = true
+        settings.allowFileAccess = true
+        settings.allowContentAccess = true
+        settings.loadWithOverviewMode = true
+        settings.useWideViewPort = true
+        settings.mediaPlaybackRequiresUserGesture = false
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        settings.cacheMode = WebSettings.LOAD_DEFAULT
+
+        webView.addJavascriptInterface(AIStudioAndroidBridge(this), "AIStudioAndroid")
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                super.onPageStarted(view, url, favicon)
                 progressBar.visibility = View.VISIBLE
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                progressBar.visibility = View.GONE
-            }
-
-            override fun onReceivedError(
-                view: WebView?,
-                request: WebResourceRequest?,
-                error: WebResourceError?
-            ) {
-                super.onReceivedError(view, request, error)
                 progressBar.visibility = View.GONE
             }
         }
@@ -108,11 +86,11 @@ class MainActivity : AppCompatActivity() {
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 progressBar.progress = newProgress
-                if (newProgress == 100) {
-                    progressBar.visibility = View.GONE
-                } else {
-                    progressBar.visibility = View.VISIBLE
-                }
+                if (newProgress == 100) progressBar.visibility = View.GONE
+            }
+
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                request?.grant(request.resources)
             }
 
             override fun onShowFileChooser(
@@ -127,22 +105,14 @@ class MainActivity : AppCompatActivity() {
                     type = "*/*"
                     addCategory(Intent.CATEGORY_OPENABLE)
                 }
-
-                return try {
-                    filePickerLauncher.launch(intent)
-                    true
-                } catch (e: Exception) {
-                    fileUploadCallback = null
-                    false
-                }
-            }
-
-            override fun onPermissionRequest(request: PermissionRequest?) {
-                runOnUiThread {
-                    request?.grant(request.resources)
-                }
+                filePickerLauncher.launch(intent)
+                return true
             }
         }
+    }
+
+    private fun loadAIStudioBundle() {
+        webView.loadUrl("file:///android_asset/dist/index.html")
     }
 
     override fun onBackPressed() {
@@ -151,5 +121,30 @@ class MainActivity : AppCompatActivity() {
         } else {
             super.onBackPressed()
         }
+    }
+}
+
+/**
+ * Native JavaScript Interface for Google AI Studio applets
+ */
+class AIStudioAndroidBridge(private val activity: MainActivity) {
+
+    @JavascriptInterface
+    fun showToast(message: String) {
+        activity.runOnUiThread {
+            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    @JavascriptInterface
+    fun triggerHapticFeedback() {
+        activity.runOnUiThread {
+            activity.window.decorView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        }
+    }
+
+    @JavascriptInterface
+    fun getPlatform(): String {
+        return "Google AI Studio Android APK (SDK ${Build.VERSION.SDK_INT})"
     }
 }
